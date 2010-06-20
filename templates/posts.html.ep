@@ -1,0 +1,21 @@
+<ul class="posts">
+<% while ( my $post = $posts->next ) { %>
+    <li>
+        <h2><a href="<%= $post->url %>"><%= $post->title %></a></h2>
+        <div class="created">Posted by <%= $post->author %> for <a href="<%== $post->source->url %>"><%= $post->source->title %></a> on <%= $post->created->dmy('/') %> at <%= $post->created->hms(':') %></div>
+        <div class="summary"><%== $post->summary %></div>
+    </li>
+<% } %>
+</ul>
+
+
+<% if ( my $pager = $posts->pager ) { %>
+<div class="pager">
+    <% if ( my $prev = $pager->previous_page ) { %>
+    <a href="/?page=<%= $prev %>">Previous</a>
+    <% } %>
+    <% if ( my $next = $pager->next_page ) { %>
+    <a href="/?page=<%= $next %>">Next</a>
+    <% } %>
+</div>
+<% } %>

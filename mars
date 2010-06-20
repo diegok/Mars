@@ -1,0 +1,146 @@
+#!/usr/bin/env perl
+
+use Mojolicious::Lite;
+use Mojo::Server::Daemon;
+
+use EV;
+use AnyEvent::Feed;
+use AnyEvent::FIFO;
+
+use Mars::Schema;
+
+use utf8;
+
+our $model = Mars::Schema->connect('dbi:SQLite:mars.db');
+our $feeds = init_feeds();
+
+our $fifo = AnyEvent::FIFO->new( max_active => 1 );
+
+get '/' => sub {
+    my $self = shift;
+    my $page = $self->param('page') || 1;
+
+    my $rs = $model->resultset('Post')->search( {}, { rows => 10, page => $page } );
+
+    $self->stash( posts => $rs );
+
+    $self->render( 'posts', layout => 'red' );
+};
+
+get '/sources' => sub {
+    my $self = shift;
+    $self->render('feeds');
+};
+
+get '/src/add' => sub {
+    my $self = shift;
+    $self->render('src_form');
+};
+
+post '/src/add' => sub {
+    my $self = shift;
+
+    my ( $title, $blog, $feed ) = map { $self->param($_) } qw/ title url feed /;
+
+    if ( $title && $blog && $feed ) {
+        my $src; 
+        eval {
+            $src = $model->resultset('Source')->create({
+                title    => $title,
+                url      => $blog,
+                url_feed => $feed,
+            })
+        };
+
+        if ( $src ) {
+            push @$feeds, {
+                src    => $src,
+                reader => AnyEvent::Feed->new (
+                    url      => $src->url_feed,
+                    interval => 1800,
+                    on_fetch => sub { feed_fetch_cb( $src, @_) }
+                )
+            };
+
+            $self->render_json({
+                title => $src->title,
+                url   => $src->url,
+                feed  => $src->url_feed,
+                id    => $src->id
+            });
+        }
+        else {
+            $self->render_error( $@ );
+        }
+    }
+    else {
+        $self->render_text('You should pass the source data.');
+    }
+} => 'src';
+
+sub END {
+    my $daemon = Mojo::Server::Daemon->new;
+
+    $daemon->app(app);
+    $daemon->ioloop->idle_cb(sub { EV::loop EV::LOOP_NONBLOCK });
+    $daemon->run;
+}
+
+sub init_feeds {
+    my $feeds = [];
+
+    for my $src ( $model->resultset('Source')->all ) {
+        push @$feeds, {
+            src    => $src,
+            reader => AnyEvent::Feed->new (
+                url      => $src->url_feed,
+                interval => 1800,
+                on_fetch => sub { feed_fetch_cb( $src, @_) }
+            )
+        }
+    }
+
+    return $feeds;
+}
+
+sub feed_fetch_cb {
+    my ($source, $feed_reader, $new_entries, $feed, $error) = @_;
+
+    print STDERR 'Checking for new posts on "', $source->title, '"', "\n";
+
+    if (defined $error) {
+        print STDERR "Error fetching from " . $source->url_feed .": $error\n";
+        return;
+    }
+
+    for (@$new_entries) {
+        my ( $hash, $entry ) = @$_;
+        $fifo->push( \&post_add_cb, $source, $hash, $entry );
+    }
+}
+
+sub post_add_cb {
+    my ( $guard, $source, $hash, $entry ) = @_;
+    my $post; eval {
+        $post = $source->add_to_posts({
+            id      => $hash,
+            title   => $entry->title,
+            url     => $entry->link,
+            summary => $entry->summary->body,
+            body    => $entry->content->body,
+            created => $entry->issued || $entry->modified,
+            author  => $entry->author,
+            tags    => join(', ', $entry->tags),
+        })
+    };
+    if ( $post ) {
+        print STDERR 'New post in "', $source->title, '": ', $post->title, "\n";
+    }
+    elsif ( $@ && $@ =~ /unique/ ) {
+        print STDERR "Post $hash was discovered but it already exists in local storage.\n";
+    }
+    else {
+        print STDERR "Can't store new post: ", $@, "\n";
+    }
+}
+

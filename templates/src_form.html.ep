@@ -1,0 +1,7 @@
+<%= form_for src => (method => 'post') => {%>
+    <%= input 'title', type => 'text' %>
+    <%= input 'url', type => 'text' %>
+    <%= input 'feed', type => 'text' %>
+    <input type="submit" value="add" />
+<%}%>
+
