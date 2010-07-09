@@ -14,6 +14,7 @@
     <% if ( my $prev = $pager->previous_page ) { %>
     <a href="/?page=<%= $prev %>">Previous</a>
     <% } %>
+    <span><%= $pager->current_page %> / <%= $pager->last_page %></span>
     <% if ( my $next = $pager->next_page ) { %>
     <a href="/?page=<%= $next %>">Next</a>
     <% } %>

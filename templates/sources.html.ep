@@ -1,0 +1,8 @@
+<ul class="sources">
+<% foreach my $src ( @$sources ) { %>
+    <li>
+        <h2><a href="<%= $src->url %>"><%= $src->title %></a></h2>
+        <%= link_to rm_posts => { id => $src->id } %>
+    </li>
+<% } %>
+</ul>

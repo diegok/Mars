@@ -11,7 +11,7 @@ use Mars::Schema;
 
 use utf8;
 
-our $model = Mars::Schema->connect('dbi:SQLite:mars.db');
+our $model = Mars::Schema->connect('dbi:SQLite:mars.db', '', '', { sqlite_unicode => 1 });
 our $feeds = init_feeds();
 
 our $fifo = AnyEvent::FIFO->new( max_active => 1 );
@@ -29,8 +29,20 @@ get '/' => sub {
 
 get '/sources' => sub {
     my $self = shift;
-    $self->render('feeds');
+    $self->stash( sources => [ map { $_->{src} } @$feeds ] );
+    $self->render('sources');
 };
+
+get '/src/:id/posts/rm' => sub {
+    my $self = shift;
+    if ( my $src = $model->resultset('Source')->find( $self->stash('id') ) ) {
+        $src->posts->delete();
+        $self->render_text('Posts deleted');
+    }
+    else {
+        $self->render_text('Source not found');
+    }
+} => 'rm_posts';
 
 get '/src/add' => sub {
     my $self = shift;
@@ -62,12 +74,7 @@ post '/src/add' => sub {
                 )
             };
 
-            $self->render_json({
-                title => $src->title,
-                url   => $src->url,
-                feed  => $src->url_feed,
-                id    => $src->id
-            });
+            $self->render_text('Added new source: ' . $src->id);
         }
         else {
             $self->render_error( $@ );

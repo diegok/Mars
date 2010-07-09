@@ -51,7 +51,7 @@ __PACKAGE__->add_columns(
 
 __PACKAGE__->set_primary_key( 'id' );
 
-__PACKAGE__->resultset_attributes({ order_by => [ 'created' ] });
+__PACKAGE__->resultset_attributes({ order_by => [ 'created DESC' ] });
 
 __PACKAGE__->belongs_to( 'source', 'Mars::Schema::Result::Source', { 'foreign.id' => 'self.id_source' });
 
